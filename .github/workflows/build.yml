@@ -1,0 +1,46 @@
+name: Build MP4→MP3 (Windows)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "mp4_a_mp3_gui_ffmpeg.py"
+      - ".github/workflows/build.yml"
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyInstaller
+        run: pip install --upgrade pip pyinstaller
+
+      # 🔽 Descarga FFmpeg estático (binario real), no el shim de choco
+      - name: Download static FFmpeg
+        shell: powershell
+        run: |
+          Invoke-WebRequest -Uri https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip -OutFile ffmpeg.zip
+          Expand-Archive ffmpeg.zip -DestinationPath .
+          $ff = Get-ChildItem -Recurse -Filter ffmpeg.exe | Where-Object { $_.FullName -match 'bin\\ffmpeg.exe$' } | Select-Object -First 1 -ExpandProperty FullName
+          echo "FFMPEG_PATH=$ff" >> $env:GITHUB_ENV
+
+      - name: Build EXE (bundling ffmpeg.exe)
+        shell: powershell
+        run: |
+          pyinstaller --onefile --windowed --name MP4_a_MP3 `
+            --add-binary "$env:FFMPEG_PATH;." `
+            mp4_a_mp3_gui_ffmpeg.py
+
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: MP4_a_MP3-Windows
+          path: dist/MP4_a_MP3.exe
